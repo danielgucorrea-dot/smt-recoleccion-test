@@ -787,6 +787,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
   .alerta-hoy { background: #fbeaea; border-left: 3px solid var(--alerta); padding: 10px 14px; border-radius: 3px; font-size: 0.9rem; margin-bottom: 14px; color: #6e2323; }
   .info-hoy { background: #eef4fb; border-left: 3px solid #3a6ea8; padding: 10px 14px; border-radius: 3px; font-size: 0.9rem; margin-bottom: 14px; color: #234163; }
+  .aviso-aproximado { background: #fbf6e6; border-left: 3px solid #b98a1f; padding: 10px 14px; border-radius: 3px; font-size: 0.87rem; margin-bottom: 14px; color: #6b4c12; }
   .no-encontrado { color: var(--alerta); font-size: 0.92rem; line-height: 1.5; }
 
   footer.nota-fuente {
@@ -818,7 +819,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     </div>
     <div class="sugerencias" id="sugerencias"></div>
     <div class="error-busqueda" id="errorBusqueda"></div>
-    <div class="ayuda-alt">¿No aparece tu dirección? Tocá directamente tu domicilio en el mapa de abajo.</div>
+    <div class="ayuda-alt">La búsqueda por dirección es aproximada (depende de un mapa gratuito que no tiene cargados todos los números de puerta). <strong>Si tenés dudas, tocá directamente tu domicilio en el mapa de abajo — es el método más confiable.</strong></div>
   </div>
 
   <div class="layout">
@@ -966,7 +967,7 @@ function resaltarLineal(feature) {
   }).addTo(map);
 }
 
-function renderResultadoConTurno(servicio, turno, etiquetaDireccion, feature) {
+function renderResultadoConTurno(servicio, turno, etiquetaDireccion, feature, aproximada) {
   resaltarPoligono(feature);
   const panel = document.getElementById('panelResultado');
   const { esDomingo, esSabado } = diaDeHoyInfo();
@@ -985,6 +986,10 @@ function renderResultadoConTurno(servicio, turno, etiquetaDireccion, feature) {
     avisoHoy = `<div class="info-hoy"><strong>Hoy es sábado:</strong> el turno Nocturno de esta zona pasa a funcionar de 14:00 a 18:00 hs.</div>`;
   }
 
+  const avisoAproximado = aproximada
+    ? `<div class="aviso-aproximado"><strong>Ubicación aproximada:</strong> no encontramos el número exacto en el buscador de direcciones. Este resultado corresponde a la calle/cuadra. Si tenés dudas, confirmá tocando tu domicilio exacto en el mapa.</div>`
+    : '';
+
   const colorTurno = COLOR_TURNO[turno] || COLOR_PENDIENTE;
 
   panel.innerHTML = `
@@ -993,6 +998,7 @@ function renderResultadoConTurno(servicio, turno, etiquetaDireccion, feature) {
       <span class="badge-turno" style="background:${colorTurno}">Turno ${turno}</span>
     </div>
     <div class="direccion-mostrada">${etiquetaDireccion}</div>
+    ${avisoAproximado}
     ${avisoHoy}
     <div class="bloque-horario">
       <div class="etiqueta">Horario de recolección</div>
@@ -1004,15 +1010,19 @@ function renderResultadoConTurno(servicio, turno, etiquetaDireccion, feature) {
   `;
 }
 
-function renderResultadoPendiente(servicio, etiquetaDireccion, feature) {
+function renderResultadoPendiente(servicio, etiquetaDireccion, feature, aproximada) {
   resaltarLineal(feature);
   const panel = document.getElementById('panelResultado');
+  const avisoAproximado = aproximada
+    ? `<div class="aviso-aproximado"><strong>Ubicación aproximada:</strong> no encontramos el número exacto en el buscador de direcciones. Este resultado corresponde a la calle/cuadra. Si tenés dudas, confirmá tocando tu domicilio exacto en el mapa.</div>`
+    : '';
   panel.innerHTML = `
     <div>
       <span class="badge-servicio">Servicio N.° ${servicio}</span>
       <span class="badge-turno" style="background:${COLOR_PENDIENTE}">Zona Centro</span>
     </div>
     <div class="direccion-mostrada">${etiquetaDireccion}</div>
+    ${avisoAproximado}
     <div class="bloque-horario pendiente">
       <div class="etiqueta">Horario de recolección</div>
       <div class="hs">A confirmar con la Secretaría</div>
@@ -1071,7 +1081,7 @@ function distanciaAMultiLinea(pt, feature, units) {
   return min;
 }
 
-function consultarPunto(lat, lon, etiquetaDireccion) {
+function consultarPunto(lat, lon, etiquetaDireccion, aproximada) {
   if (marcadorActual) map.removeLayer(marcadorActual);
   marcadorActual = L.marker([lat, lon], { icon: iconoUbicacion }).addTo(map);
   map.setView([lat, lon], 16);
@@ -1082,7 +1092,7 @@ function consultarPunto(lat, lon, etiquetaDireccion) {
   for (const feature of ZONAS_POLIGONO.features) {
     try {
       if (turf.booleanPointInPolygon(pt, feature)) {
-        renderResultadoConTurno(feature.properties.Servicio, feature.properties.Turno, etiquetaDireccion, feature);
+        renderResultadoConTurno(feature.properties.Servicio, feature.properties.Turno, etiquetaDireccion, feature, aproximada);
         return;
       }
     } catch (e) { /* geometría inválida puntual, se ignora */ }
@@ -1098,7 +1108,7 @@ function consultarPunto(lat, lon, etiquetaDireccion) {
     } catch (e) { /* ignorar */ }
   }
   if (mejor && mejorDist <= UMBRAL_LINEAL_M) {
-    renderResultadoPendiente(mejor.properties.Servicio, etiquetaDireccion, mejor);
+    renderResultadoPendiente(mejor.properties.Servicio, etiquetaDireccion, mejor, aproximada);
     return;
   }
 
@@ -1151,7 +1161,9 @@ async function buscarSugerencias(q) {
         const d = data[i];
         document.getElementById('direccion').value = d.display_name;
         cont.style.display = 'none';
-        consultarPunto(parseFloat(d.lat), parseFloat(d.lon), d.display_name);
+        const numeroBuscado = extraerNumero(q);
+        const aproximada = numeroBuscado ? !new RegExp('\\b' + numeroBuscado + '\\b').test(d.display_name) : false;
+        consultarPunto(parseFloat(d.lat), parseFloat(d.lon), d.display_name, aproximada);
       });
     });
   } catch (err) {
@@ -1166,6 +1178,11 @@ document.getElementById('direccion').addEventListener('input', (e) => {
   debounceTimer = setTimeout(() => buscarSugerencias(q), 450);
 });
 
+function extraerNumero(texto) {
+  const m = texto.match(/\d+/);
+  return m ? m[0] : null;
+}
+
 document.getElementById('btnBuscar').addEventListener('click', async () => {
   const q = document.getElementById('direccion').value.trim();
   if (!q) return;
@@ -1173,13 +1190,21 @@ document.getElementById('btnBuscar').addEventListener('click', async () => {
   const btn = document.getElementById('btnBuscar');
   btn.disabled = true;
   btn.textContent = 'Buscando…';
-  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&countrycodes=ar&viewbox=${viewbox}&bounded=1&q=${encodeURIComponent(q + ', San Miguel de Tucumán, Tucumán, Argentina')}`;
+  const numeroBuscado = extraerNumero(q);
+  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=ar&viewbox=${viewbox}&bounded=1&q=${encodeURIComponent(q + ', San Miguel de Tucumán, Tucumán, Argentina')}`;
   try {
     const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if (data.length) {
-      consultarPunto(parseFloat(data[0].lat), parseFloat(data[0].lon), data[0].display_name);
+      // Preferimos el resultado que efectivamente incluya el número de puerta buscado.
+      let elegido = null;
+      if (numeroBuscado) {
+        elegido = data.find(d => new RegExp('\\b' + numeroBuscado + '\\b').test(d.display_name));
+      }
+      const aproximada = !elegido;
+      if (!elegido) elegido = data[0];
+      consultarPunto(parseFloat(elegido.lat), parseFloat(elegido.lon), elegido.display_name, aproximada);
       document.getElementById('sugerencias').style.display = 'none';
     } else {
       renderNoEncontrado(`No se encontró la dirección "${q}"`);
