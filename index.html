@@ -990,10 +990,6 @@ function renderResultadoConTurno(servicio, turno, etiquetaDireccion, feature, ap
     ? `<div class="aviso-aproximado"><strong>Ubicación aproximada:</strong> no encontramos el número exacto en el buscador de direcciones. Este resultado corresponde a la calle/cuadra. Si tenés dudas, confirmá tocando tu domicilio exacto en el mapa.</div>`
     : '';
 
-  const notaLineal = esLineal
-    ? `<div class="nota">Este servicio se presta por recorrido de calles en la zona Centro / Barrio Sur, no por área completa.</div>`
-    : '';
-
   const colorTurno = COLOR_TURNO[turno] || COLOR_PENDIENTE;
 
   panel.innerHTML = `
@@ -1004,7 +1000,6 @@ function renderResultadoConTurno(servicio, turno, etiquetaDireccion, feature, ap
     <div class="direccion-mostrada">${etiquetaDireccion}</div>
     ${avisoAproximado}
     ${avisoHoy}
-    ${notaLineal}
     <div class="bloque-horario">
       <div class="etiqueta">Franja horaria de recolección</div>
       <div class="hs">${horarioHoy.inicio} a ${horarioHoy.fin} hs</div>
